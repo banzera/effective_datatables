@@ -33,6 +33,14 @@ module Effective
 
           name = name.to_sym unless name.to_s.include?('.')
 
+          computed_label = if label.present?
+            label
+          elsif effective_resource.present?
+            effective_resource.klass.human_attribute_name(name)
+          else
+            name.to_s.split('.').last.titleize
+          end
+
           datatable._columns[name] = Effective::DatatableColumn.new(
             action: action,
             as: as,
@@ -40,7 +48,7 @@ module Effective
             col_class: col_class,
             format: (format if block_given?),
             index: nil,
-            label: (label.nil? ? name.to_s.split('.').last.titleize : label),
+            label: computed_label,
             name: name,
             partial: partial,
             partial_as: partial_as,
