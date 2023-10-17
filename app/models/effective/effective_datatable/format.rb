@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Effective
   module EffectiveDatatable
     module Format
@@ -8,14 +10,16 @@ module Effective
 
       private
 
-      def format(collection)
+      def format(collection, csv: false)
         # We want to use the render :collection for each column that renders partials
         rendered = {}
 
         columns.each do |name, opts|
-          next unless state[:visible][name]
-
-          if opts[:partial]
+          if state[:visible][name] == false && !csv
+            # Nothing to do
+          elsif csv && !opts[:csv]
+            # Nothing to do
+          elsif opts[:partial]
             locals = { datatable: self, column: opts }.merge!(resource_col_locals(opts))
 
             rendered[name] = (view.render(
@@ -26,6 +30,7 @@ module Effective
               locals: locals,
               spacer_template: SPACER_TEMPLATE
             ) || '').split(SPACER)
+
           elsif opts[:as] == :actions # This is actions_col and actions_col do .. end, but not actions_col partial: 'something'
             locals = { datatable: self, column: opts, spacer_template: SPACER_TEMPLATE }
 
@@ -45,7 +50,6 @@ module Effective
             else
               (view.render_resource_actions(collection.map { |row| row[opts[:index]] }, atts, &opts[:format]) || '').split(SPACER)
             end
-
           end
         end
 
@@ -54,30 +58,50 @@ module Effective
             index = opts[:index]
             value = row[index]
 
-            row[index] = (
-              if state[:visible][name] == false
+            formatted = (
+              if state[:visible][name] == false && !csv
                 NONVISIBLE
+              elsif csv && !opts[:csv]
+                BLANK
               elsif opts[:as] == :actions
                 rendered[name][row_index]
               elsif opts[:format] && rendered.key?(name)
                 dsl_tool.instance_exec(value, row, rendered[name][row_index], &opts[:format])
               elsif opts[:format]
-                dsl_tool.instance_exec(value, row, &opts[:format])
+                dsl_tool.instance_exec(value, row, &opts[:format]).to_s
               elsif opts[:partial]
                 rendered[name][row_index]
               else
-                format_column(value, opts)
+                format_column(value, opts, csv: csv)
               end
             )
+
+            if csv && (opts[:format] || opts[:partial])
+              formatted = view.strip_tags(formatted)
+
+              formatted.gsub!("\n\n", ' ') unless formatted.frozen?
+              formatted.gsub!("\n", '')  unless formatted.frozen?
+            end
+
+            row[index] = formatted
           end
         end
       end
 
-      def format_column(value, column)
+      # Must return a string
+      def format_column(value, column, csv: false)
         return if value.nil? || (column[:resource] && value.blank?)
 
         unless column[:as] == :email
           return value if value.kind_of?(String)
+        end
+
+        if value.kind_of?(Array) && column[:as] == :string
+          if csv
+            return value.map { |v| format_column(v, column, csv: csv) }.join("\n")
+          else
+            return value.map { |v| view.content_tag(:div, format_column(v, column, csv: csv), class: 'col-resource_item') }.join.html_safe
+          end
         end
 
         case column[:as]
@@ -90,21 +114,25 @@ module Effective
         when :date
           value.respond_to?(:strftime) ? value.strftime(EffectiveDatatables.format_date) : BLANK
         when :datetime
-          value.respond_to?(:strftime) ? value.strftime(EffectiveDatatables.format_datetime) : BLANK
+          if csv
+            value.to_s
+          else
+            value.respond_to?(:strftime) ? value.strftime(EffectiveDatatables.format_datetime) : BLANK
+          end
         when :decimal
-          value
+          value.to_s
         when :duration
           view.number_to_duration(value)
         when :effective_addresses
-          value.to_html
+          csv ? value.to_html.gsub('<br>', "\n") : value.to_html
         when :effective_obfuscation
-          value
+          value.to_s
         when :effective_roles
           value.join(', ')
         when :email
-          view.mail_to(value)
+          csv ? value : view.mail_to(value)
         when :integer
-          value
+          value.to_s
         when :percent
           case value
           when Integer    ; view.number_to_percentage(value / 1000.0, precision: 3).gsub('.000%', '%')
@@ -128,7 +156,7 @@ module Effective
       def actions_col_actions(column)
         resource_actions = (effective_resource&.resource_actions || fallback_effective_resource.fallback_resource_actions)
 
-        actions = if column[:inline]
+        actions = if inline?
           resource_actions.transform_values { |opts| opts['data-remote'] = true; opts }
         else
           resource_actions.transform_values { |opts| opts['data-remote'] = true if opts['data-method']; opts }

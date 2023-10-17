@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Effective
   module EffectiveDatatable
     module Compute
@@ -58,13 +60,14 @@ module Effective
         finalize(col)
       end
 
-      def arrayize(collection)
+      def arrayize(collection, csv: false)
         collection.map do |obj|
           columns.map do |name, opts|
-            if state[:visible][name] == false && (name != order_name)  # Sort by invisible array column
+            if state[:visible][name] == false && !csv && (name != order_name)  # Sort by invisible array column
+              BLANK
+            elsif csv && !opts[:csv]
               BLANK
             elsif opts[:compute]
-
               if array_collection?
                 dsl_tool.instance_exec(obj, obj[opts[:index]], &opts[:compute])
               else

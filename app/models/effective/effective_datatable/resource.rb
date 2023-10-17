@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Effective
   module EffectiveDatatable
     module Resource
@@ -156,7 +158,6 @@ module Effective
 
       def load_resource_search!
         columns.each do |name, opts|
-
           case opts[:search]
           when false
             opts[:search] = { as: :null }; next
@@ -174,13 +175,14 @@ module Effective
 
           # Parameterize collection
           if search[:collection].kind_of?(ActiveRecord::Relation)
-            search[:collection] = search[:collection].map { |obj| [obj.to_s, obj.to_param] }
+            search[:collection] = search[:collection].map { |obj| [obj.to_s, obj.id] }
           elsif search[:collection].kind_of?(Array) && search[:collection].first.kind_of?(ActiveRecord::Base)
-            search[:collection] = search[:collection].map { |obj| [obj.to_s, obj.to_param] }
+            search[:collection] = search[:collection].map { |obj| [obj.to_s, obj.id] }
+          elsif search[:collection].kind_of?(Array)
+            search[:collection] = search[:collection]
           end
 
           search[:as] ||= :select if search.key?(:collection)
-          search[:fuzzy] ||= true unless search.key?(:fuzzy)
           search[:value] ||= search.delete(:selected) if search.key?(:selected)
 
           # Merge with defaults
@@ -189,9 +191,17 @@ module Effective
 
           if array_collection? && opts[:resource].present?
             search.reverse_merge!(search_resource.search_form_field(name, collection.first[opts[:index]]))
+          elsif search[:as] == :select && search[:collection].kind_of?(Array)
+            # Nothing to do
           elsif search[:as] != :string
             search.reverse_merge!(search_resource.search_form_field(name, opts[:as]))
           end
+
+          # Assign default search operation
+          search[:operation] ||= search.delete(:op)
+          search[:operation] ||= :matches if search[:fuzzy]
+          search[:operation] ||= :eq if search[:as] == :select
+          search[:operation] ||= search_resource.sql_operation(name, as: opts[:as])
 
           # Assign default include_null
           if search[:as] == :select && !search.key?(:include_null)

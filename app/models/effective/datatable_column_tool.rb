@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Effective
   class DatatableColumnTool
     attr_reader :datatable
@@ -7,7 +9,7 @@ module Effective
       @datatable = datatable
 
       if datatable.active_record_collection?
-        @columns = datatable.columns.select { |_, col| col[:sql_column].present? }
+        @columns = datatable.columns.select { |_, col| col[:sql_column].present? || (col[:search_method].present? && col[:sql_column] != false) }
       else
         @columns = {}
       end
@@ -43,7 +45,7 @@ module Effective
       Rails.logger.info "COLUMN TOOL: order_column #{column.to_s} #{direction} #{sql_column}" if EffectiveDatatables.debug
 
       if column[:sql_as_column]
-        collection.order("#{sql_column} #{datatable.effective_resource.sql_direction(direction)}")
+        collection.order(Arel.sql("#{sql_column} #{datatable.effective_resource.sql_direction(direction)}"))
       else
         Effective::Resource.new(collection)
           .order(column[:name], direction, as: column[:as], sort: column[:sort], sql_column: column[:sql_column], limit: datatable.limit)
@@ -73,10 +75,10 @@ module Effective
     end
 
     def search_column(collection, value, column, sql_column)
-      Rails.logger.info "COLUMN TOOL: search_column #{column.to_s} #{value} #{sql_column}" if EffectiveDatatables.debug
+      Rails.logger.info "COLUMN TOOL: search_column #{column.to_s} value=#{value} operation=#{column[:search][:operation]} column=#{sql_column}" if EffectiveDatatables.debug
 
       Effective::Resource.new(collection)
-        .search(column[:name], value, as: column[:as], fuzzy: column[:search][:fuzzy], sql_column: sql_column)
+        .search(column[:name], value, as: column[:as], operation: column[:search][:operation], column: sql_column)
     end
 
     def paginate(collection)

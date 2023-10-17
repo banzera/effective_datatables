@@ -46,9 +46,11 @@ Please check out [Effective Datatables 3.x](https://github.com/code-and-effect/e
     * [order](#order)
     * [reorder](#reorder)
     * [aggregate](#aggregate)
+    * [download](#download)
   * [filters](#filters)
     * [scope](#scope)
     * [filter](#filter)
+    * [filter_date_range](#filter_date_range)
   * [bulk_actions](#bulk_actions)
     * [bulk_action](#bulk_action)
     * [bulk_action](#bulk_action_divider)
@@ -604,6 +606,12 @@ Any `data-remote` actions will be hijacked and performed as inline ajax by datat
 
 If you'd like to opt-out of this behavior, use `actions_col(inline: false)` or add `data-inline: false` to your action link.
 
+If the automatic actions_col aren't being displayed, try setting the namespace directly when calling the table
+
+```
+MyApp::UsersTable.new(namespace: :my_app)
+```
+
 ## length
 
 Sets the default number of rows per page. Valid lengths are `5`, `10`, `25`, `50`, `100`, `250`, `500`, `:all`
@@ -680,6 +688,30 @@ end.aggregate { |values, column| distance_of_time_in_words(values.min, values.ma
 ```
 
 In the above example, `values` is an Array containing all row's values for one column at a time.
+
+## download
+
+Add a Download button which streams a CSV file containing all rows and columns in the table's collection, ignoring any search, sort or filtering.
+
+This is an opt-in feature.
+
+To enable, please set `config.download = true` in your `config/initializers/effective_datatables.rb` file.
+
+Once enabled, you can disable it on an individual table by:
+
+```ruby
+datatable do
+  download false
+end
+```
+
+and you can exclude individual columns from being rendered on the CSV export
+
+```ruby
+col :first_name, csv: false
+```
+
+The column will still appear in the export, but the contents will be blank.
 
 ## filters
 
@@ -759,6 +791,24 @@ required: true|false            # Passed to form
 ```
 
 Any other option given will be yielded to EffectiveBootstrap as options.
+
+## filter_date_range
+
+There is also a special date range filter built in. To use:
+
+```ruby
+filters do
+  filter_date_range
+end
+
+collection do
+  Thing.where(updated_at: date_range)
+end
+```
+
+This method creates 3 filters, `filters[:date_range]`, `filters[:start_date]` and `filters[:end_date]` and presents a rough Prev/Next month and year navigation. Do not have any columns named the same as these.
+
+You can pass a default into `filter_date_range`, one of `:current_month`, `:current_year`, `:month`, `:year` and `:custom`.
 
 ## bulk_actions
 
@@ -1080,6 +1130,27 @@ Above we have `resources :things` for the 7 crud actions. And we add two more me
 ```
 
 Your datatable should now have New, Show, Edit, Approve and Reject buttons. Click them for inline functionality.
+
+## Adding an Ajax member action
+
+To render a member action with an inline datatable:
+
+- Create a "cool_things.html" template and a "_cool_things.html" partial file. Need both.
+
+- The links must be inside an `actions_col` or a `col(:thing, col_class: 'col-actions')` for the javascript to work.
+
+- The action itself just needs to be `data-remote=true`. Try `link_to('Show Cool Things', thing_cool_things_path(thing), 'data-remote': true)`
+
+Make sure the route and permissions are working:
+
+```
+resources :things do
+  get :cool_things, on: :member
+```
+
+and `can?(:cool_things, Thing)`
+
+Good luck.
 
 ## Troubleshooting Inline
 

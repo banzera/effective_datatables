@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Effective
   class Datatable
     attr_reader :attributes # Anything that we initialize our table with. That's it. Can't be changed by state.
@@ -30,6 +32,7 @@ module Effective
     include Effective::EffectiveDatatable::Collection
     include Effective::EffectiveDatatable::Compute
     include Effective::EffectiveDatatable::Cookie
+    include Effective::EffectiveDatatable::Csv
     include Effective::EffectiveDatatable::Format
     include Effective::EffectiveDatatable::Hooks
     include Effective::EffectiveDatatable::Params
@@ -39,7 +42,7 @@ module Effective
     def initialize(view = nil, attributes = nil)
       (attributes = view; view = nil) if view.kind_of?(Hash)
 
-      @attributes = (attributes || {})
+      @attributes = initial_attributes(attributes)
       @state = initial_state
 
       @_aggregates = {}
@@ -54,6 +57,22 @@ module Effective
       raise 'collection is defined as a method. Please use the collection do ... end syntax.' unless collection.nil?
 
       self.view = view if view
+    end
+
+    # Checks en.datatables.admin/my_datatable
+    def self.datatable_name
+      key = "datatables.#{name.underscore}"
+      value = ::I18n.t(key)
+
+      if value.include?(key) # missing translation
+        name.titleize.split('/').last.chomp(' Datatable')
+      else
+        value
+      end
+    end
+
+    def datatable_name
+      self.class.datatable_name
     end
 
     def rendered(params = {})
@@ -140,6 +159,10 @@ module Effective
       to_json[:recordsTotal] == 0
     end
 
+    def to_csv
+      csv_file()
+    end
+
     def to_json
       @json ||= (
         {
@@ -167,6 +190,18 @@ module Effective
       !reorder? && attributes[:sortable] != false
     end
 
+    def searchable?
+      attributes[:searchable] != false
+    end
+
+    def downloadable?
+      attributes[:downloadable] != false
+    end
+
+    def skip_save_state?
+      attributes[:skip_save_state] == true
+    end
+
     # Whether the filters must be rendered as a <form> or we can keep the normal <div> behaviour
     def _filters_form_required?
       _form[:verb].present?
@@ -178,6 +213,33 @@ module Effective
 
     def to_param
       "#{self.class.name.underscore.parameterize}-#{[self.class, attributes].hash.abs.to_s.last(12)}"
+    end
+
+    def date_range(value = nil)
+      now = Time.zone.now
+
+      value ||= filters[:date_range]
+      start_date ||= filters[:start_date]
+      end_date ||= filters[:end_date]
+
+      return (nil..nil) if value.blank?
+
+      case value.to_sym
+      when :current_month
+        (now.beginning_of_month..now.end_of_day)
+      when :current_year
+        (now.beginning_of_year..now.end_of_day)
+      when :month
+        (start_date || now).all_month
+      when :year
+        (start_date || now).all_year
+      when :custom
+        (start_date&.beginning_of_day..end_date&.end_of_day)
+      when :all
+        (nil..nil)
+      else
+        raise('unexpected date range value')
+      end
     end
 
     def columns
@@ -202,6 +264,10 @@ module Effective
 
     def default_visibility
       columns.values.inject({}) { |h, col| h[col[:index]] = col[:visible]; h }
+    end
+
+    def filters_form
+      DatatableFiltersForm.new(datatable: self)
     end
 
     private

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Effective
   module EffectiveDatatable
     module Dsl
@@ -34,7 +36,7 @@ module Effective
 
           opts[:class] = [opts[:class], 'dropdown-item'].compact.join(' ')
 
-          link_to(title, url, opts)
+          link_to(title, url, **opts)
         end
 
       end

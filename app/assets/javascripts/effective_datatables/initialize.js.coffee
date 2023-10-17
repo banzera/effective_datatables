@@ -70,7 +70,7 @@ initializeDataTables = (target) ->
           params['scope'] = $form.find("input[name='filters[scope]']:checked").val() || ''
           params['filter'] = {}
 
-          $form.find("select,textarea,input:not([type=submit])").each ->
+          $form.find("select,textarea,input:enabled:not([type=submit])").each ->
             $input = $(this)
 
             if ['utf8', 'authenticity_token', 'filters[scope]'].includes($input.attr('name'))
@@ -112,14 +112,8 @@ initializeDataTables = (target) ->
       $table = $(api.table().node())
       $buttons = $table.closest('.dataTables_wrapper').children().first().find('.dt-buttons')
 
-      if $table.data('reset')
-        $buttons.prepend($table.data('reset'))
-
-      if $table.data('reorder')
-        $buttons.prepend($table.data('reorder'))
-
-      if $table.data('bulk-actions')
-        $buttons.prepend($table.data('bulk-actions'))
+      if $table.data('buttons-html')
+        $buttons.prepend($table.data('buttons-html'))
 
     drawAggregates = ($table, aggregates) ->
       $tfoot = $table.find('tfoot').first()
@@ -214,3 +208,5 @@ $(document).on 'page:change', -> initializeDataTables()
 $(document).on 'turbolinks:load', -> initializeDataTables()
 $(document).on 'turbolinks:render', -> initializeDataTables()
 $(document).on 'turbolinks:before-cache', -> destroyDataTables()
+$(document).on 'turbo:load', -> initializeDataTables()
+$(document).on 'turbo:before-cache', -> destroyDataTables()

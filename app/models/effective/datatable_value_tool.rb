@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Effective
   # The collection is an Array of Arrays
   class DatatableValueTool
@@ -10,7 +12,7 @@ module Effective
       if datatable.array_collection?
         @columns = datatable.columns
       else
-        @columns = datatable.columns.select { |_, col| col[:sql_column].blank? }
+        @columns = datatable.columns.reject { |_, col| col[:sql_column].present? || (col[:search_method].present? && col[:sql_column] != false) }
       end
     end
 
@@ -77,7 +79,7 @@ module Effective
     def search_column(collection, original, column, index)
       Rails.logger.info "VALUE TOOL: search_column #{column.to_s} #{original} #{index}" if EffectiveDatatables.debug
 
-      fuzzy = column[:search][:fuzzy]
+      fuzzy = (column[:search][:operation] == :matches)
 
       term = Effective::Attribute.new(column[:as]).parse(original, name: column[:name])
       term_downcased = term.to_s.downcase
@@ -91,8 +93,11 @@ module Effective
       collection.select! do |row|
         obj = row[index]
         value = obj_to_value(row[index], column, row)
+        next if value.nil? || value == ''
 
-        case column[:as]
+        obj_equals = obj.respond_to?(column[:name]) && obj.send(column[:name]).to_s.downcase == term_downcased
+
+        obj_equals || case column[:as]
         when :boolean
           if fuzzy
             term ? (obj == true) : (obj != true)
@@ -174,6 +179,8 @@ module Effective
 
       if column[:format]
         datatable.dsl_tool.instance_exec(obj, row, &column[:format])
+      elsif column[:as] == :belongs_to_polymorphic
+        obj.send(column[:name]).to_s
       elsif column[:partial]
         obj.to_s
       elsif obj.respond_to?(column[:name])
